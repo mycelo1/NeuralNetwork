@@ -18,9 +18,11 @@ namespace NeuralNetwork
         public double Momentum { get; set; } = 0.01d;
         public double RandomWeightRange { get; set; } = 0.01d;
 
+        private bool initialized;
+
         public Network()
         {
-            //
+            initialized = false;
         }
 
         public Network AddLayer(ILayer layer)
@@ -42,17 +44,24 @@ namespace NeuralNetwork
                 throw new InvalidOperationException("must have at least 3 layers");
             }
 
+            if (!(layers[0] is InputLayer))
+            {
+                throw new InvalidOperationException($"first layer must be {nameof(InputLayer)}");
+            }
+
             for (int x = 1; x < layers.Count; x++)
             {
                 layers[x].Initialize(RandomWeightRange);
             }
+
+            initialized = true;
         }
 
         public double[] NetworkResults(double[] inputs)
         {
-            if (layers.Count == 0)
+            if (!initialized)
             {
-                throw new InvalidOperationException("no layers");
+                throw new InvalidOperationException("network not initialized");
             }
 
             if (inputs.Length != layers[0].Neurons)
@@ -71,11 +80,14 @@ namespace NeuralNetwork
         }
 
         // back propagation
-        public void Train(double[][] inputs, double[][] target_outputs, int epochs, double mean_sqr_error)
+        public (int, double) Train(double[][] inputs, double[][] target_outputs, int epochs, double target_mean_sqr_error = 0)
         {
-            if (layers.Count == 0)
+            double min_mean_sqr_error = Double.MaxValue;
+            (int, double) result = (0, 0d);
+
+            if (!initialized)
             {
-                throw new InvalidOperationException("no layers");
+                throw new InvalidOperationException("network not initialized");
             }
 
             if (inputs[0].Length != layers[0].Neurons)
@@ -88,28 +100,8 @@ namespace NeuralNetwork
                 throw new ArgumentOutOfRangeException($"{nameof(target_outputs)}");
             }
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 1; epoch <= epochs; epoch++)
             {
-                // calc mean squared error
-                double sum_squared_error = 0.0d;
-                for (int row = 0; row < inputs.Length; row++)
-                {
-                    // send inputs throughout the network
-                    double[] outputs = this.NetworkResults(inputs[row]);
-
-                    for (int col = 0; col < outputs.Length; col++)
-                    {
-                        double error = target_outputs[row][col] - outputs[col];
-                        sum_squared_error += Math.Pow(error, 2);
-                    }
-                }
-
-                // exit if mse < minimun
-                if ((sum_squared_error / inputs.Length) < mean_sqr_error)
-                {
-                    break;
-                }
-
                 // randomize training sets order
                 int[] sequence = Helper.ShuffledSequence(inputs.Length);
 
@@ -125,37 +117,39 @@ namespace NeuralNetwork
                     // compute weights (first to last layer - except input layer)
                     ((Layer)layers[1]).UpdateWeights(layers[0].Inputs, LearnRate, Momentum, WeightDecay, WeightBias);
                 }
-            }
-        }
 
-        public double TestAccuracy(double[][] test_data, double[][] target_values)
-        {
-            int hits = 0;
-
-            for (int x = 0; x < test_data.Length; ++x)
-            {
-                double[] result = NetworkResults(test_data[x]);
-                double[] target = target_values[x];
-
-                double max_value = Double.MinValue;
-                int max_index = 0;
-
-                for (int y = 0; y < result.Length; y++)
+                // calc mean squared error
+                double sum_sqr_error = 0.0d;
+                for (int row = 0; row < inputs.Length; row++)
                 {
-                    if (result[y] > max_value)
+                    // send inputs throughout the network
+                    double[] outputs = this.NetworkResults(inputs[row]);
+
+                    for (int col = 0; col < outputs.Length; col++)
                     {
-                        max_index = y;
-                        max_value = result[y];
+                        double error = target_outputs[row][col] - outputs[col];
+                        sum_sqr_error += Math.Pow(error, 2);
                     }
                 }
 
-                if (target[max_index] == 1.0d)
+                double mean_sqr_error = sum_sqr_error / inputs.Length;
+
+                // exit if mse < minimun
+                if (mean_sqr_error < target_mean_sqr_error)
                 {
-                    hits++;
+                    result = (epoch, mean_sqr_error);
+                    break;
+                }
+
+                // store optimal # of epochs
+                if (mean_sqr_error < min_mean_sqr_error)
+                {
+                    min_mean_sqr_error = mean_sqr_error;
+                    result = (epoch, mean_sqr_error);
                 }
             }
 
-            return (double)hits / (double)(test_data.Length);
+            return result;
         }
     }
 }

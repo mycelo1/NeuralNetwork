@@ -25,17 +25,16 @@ public class Program
         ann
             .AddLayer(new InputLayer(4))        // 4-neurons input layer
             .AddLayer(new TanHLayer(7))         // 7-neurons hidden layer
-            .AddLayer(new SoftmaxLayer(3));     // 3-neurons output layer
-
-        // initialize random weights and biases
-        ann.Initialize();
+            .AddLayer(new SoftmaxLayer(3))      // 3-neurons output layer
+            .Initialize();                      // initialize random weights and biases
 
         // training
-        ann.Train(train_data, train_target, 10000, 0.02d);
+        (int, double) optimal = ann.Train(train_data, train_target, 10000);
+        Console.WriteLine($"{optimal.Item1.ToString()} => {optimal.Item2.ToString("F6")}");
 
         // test accuracy on training data and new data
-        Console.WriteLine(ann.TestAccuracy(train_data, train_target).ToString("F6"));
-        Console.WriteLine(ann.TestAccuracy(test_data, test_target).ToString("F6"));
+        Console.WriteLine(TestAccuracy(train_data, train_target, ann.NetworkResults).ToString("F6"));
+        Console.WriteLine(TestAccuracy(test_data, test_target, ann.NetworkResults).ToString("F6"));
     }
 
     // slice dataset vertically and horizontally
@@ -43,6 +42,7 @@ public class Program
     {
         // Iris Flower Classification data set
         double[][] all_data = new double[150][];
+
         all_data[0] = new double[] { 5.1, 3.5, 1.4, 0.2, 0, 0, 1 };
         all_data[1] = new double[] { 4.9, 3.0, 1.4, 0.2, 0, 0, 1 };
         all_data[2] = new double[] { 4.7, 3.2, 1.3, 0.2, 0, 0, 1 };
@@ -237,5 +237,35 @@ public class Program
                 test_target[x - train_slice] = result_row;
             }
         }
+    }
+
+    public static double TestAccuracy(double[][] test_data, double[][] target_values, Func<double[], double[]> func_result)
+    {
+        int hits = 0;
+
+        for (int x = 0; x < test_data.Length; ++x)
+        {
+            double[] result = func_result(test_data[x]);
+            double[] target = target_values[x];
+
+            double max_value = Double.MinValue;
+            int max_index = 0;
+
+            for (int y = 0; y < result.Length; y++)
+            {
+                if (result[y] > max_value)
+                {
+                    max_index = y;
+                    max_value = result[y];
+                }
+            }
+
+            if (target[max_index] == 1.0d)
+            {
+                hits++;
+            }
+        }
+
+        return (double)hits / (double)(test_data.Length);
     }
 }
